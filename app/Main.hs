@@ -5,12 +5,11 @@ module Main where
 
 import Codec.Picture
 import Config
-import Control.Monad (guard)
 import Data.Foldable (minimumBy)
-import Data.Functor (($>))
+import Data.Function ((&))
 import Data.Maybe (fromJust, isJust, mapMaybe)
 import Data.Ord
-import GHC.Float (double2Float, float2Double, powerDouble, sqrtDouble)
+import GHC.Float (double2Float, powerDouble, sqrtDouble)
 import Math
 import Prelude hiding (length)
 
@@ -18,34 +17,38 @@ image :: Image PixelRGBF
 image = generateImage pixelRenderer width height
 
 pixelRenderer :: Int -> Int -> PixelRGBF
-pixelRenderer x y = case checkHits x y objectList of
-  Just hitRecord -> asPixel (0.5 * (hitRecord.normal + Vector 1 1 1))
+pixelRenderer x y = map (pixelRenderer' x y) [0 .. samplesPerPixel] & sum & (/ fromIntegral samplesPerPixel) & asPixel
+
+pixelRenderer' :: Int -> Int -> Int -> Vector
+pixelRenderer' x y sample = case checkHits x y sample objectList of
+  Just hitRecord -> 0.5 * (hitRecord.normal + 1)
   Nothing -> background
   where
-    background = PixelRGBF (blend white blueR) (blend white blueG) (blend white blueB)
+    background = blend white blue
     Vector _ deltaV _ = pixelDeltaV
     t = 0.5 * (fromIntegral y * deltaV + 1.0)
     white = 1
-    PixelRGBF blueR blueG blueB = PixelRGBF 0.5 0.7 1.0
-    blend a b = double2Float $ (1 - t) * a + t * float2Double b
+    blue = Vector 0.5 0.7 1.0
+    blend a b = (1 - splat t) * a + splat t * b
 
 asPixel :: Vector -> PixelRGBF
 asPixel (Vector x y z) = PixelRGBF (double2Float x) (double2Float y) (double2Float z)
 
-checkHits :: Int -> Int -> [Hittable] -> Maybe HitRecord
-checkHits x y objs = case hits of
+checkHits :: Int -> Int -> Int -> [Hittable] -> Maybe HitRecord
+checkHits x y sample objs = case hits of
   [] -> Nothing
   _ -> Just (minimumBy (comparing rayLength) hits)
   where
     hits = mapMaybe (\obj -> hit obj ray interval) objs
-    ray = rayFromPixelXY x y
+    ray = rayFromPixelXY x y sample
     interval = Interval {Math.min = 0, Math.max = posInf}
     posInf = 1 / 0
 
-rayFromPixelXY :: Int -> Int -> Ray
-rayFromPixelXY x y = ray
+rayFromPixelXY :: Int -> Int -> Int -> Ray
+rayFromPixelXY x y sample = ray
   where
-    pixelCenter = pixel00Loc + (fromIntegral x * pixelDeltaU) + (fromIntegral y * pixelDeltaV)
+    Vector x' y' _ = sampleOffset x y sample
+    pixelCenter = pixel00Loc + ((fromIntegral x + splat x') * pixelDeltaU) + ((fromIntegral y + splat y') * pixelDeltaV)
     rayDirection = pixelCenter - cameraCenter
     ray = Ray {origin = cameraCenter, direction = rayDirection}
 

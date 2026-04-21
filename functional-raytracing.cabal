@@ -72,6 +72,7 @@ executable functional-raytracing
     build-depends:
         , base ^>=4.18.3.0
         , JuicyPixels
+        , random
 
     -- Directories containing source files.
     hs-source-dirs:   app
