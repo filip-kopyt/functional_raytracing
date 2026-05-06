@@ -17,30 +17,37 @@ image :: Image PixelRGBF
 image = generateImage pixelRenderer width height
 
 pixelRenderer :: Int -> Int -> PixelRGBF
-pixelRenderer x y = map (pixelRenderer' x y) [0 .. samplesPerPixel] & sum & (/ fromIntegral samplesPerPixel) & asPixel
+pixelRenderer x y = map (\s -> rayColor (rayFromPixelXY x y s)) [0 .. samplesPerPixel] & sum & (/ fromIntegral samplesPerPixel) & asPixel
 
-pixelRenderer' :: Int -> Int -> Int -> Vector
-pixelRenderer' x y sample = case checkHits x y sample objectList of
-  Just hitRecord -> 0.5 * (hitRecord.normal + 1)
-  Nothing -> background
-  where
-    background = blend white blue
-    Vector _ deltaV _ = pixelDeltaV
-    t = 0.5 * (fromIntegral y * deltaV + 1.0)
-    white = 1
-    blue = Vector 0.5 0.7 1.0
-    blend a b = (1 - splat t) * a + splat t * b
+rayColor :: Ray -> Vector
+rayColor = rayColor' maxDepth 
+
+rayColor' :: Int -> Ray -> Vector
+rayColor' depth ray | depth > 0 = case checkHits ray objectList of
+                                  Just hitRecord -> childColor
+                                    where
+                                      direction = (randomNormalizedVector hitRecord.point) `onHemisphere` hitRecord.normal
+                                      childColor = 0.5 * rayColor' (depth - 1) Ray {origin = hitRecord.point, direction}
+                                  Nothing -> background
+                                    where
+                                      background = blend white blue
+                                      Vector _ deltaV _ = pixelDeltaV
+                                      Vector _ y _ = ray.direction
+                                      t = 0.5 * (y * deltaV + 1.0)
+                                      white = 1
+                                      blue = Vector 0.5 0.7 1.0
+                                      blend a b = (1 - splat t) * a + splat t * b
+                    | otherwise = 0
 
 asPixel :: Vector -> PixelRGBF
 asPixel (Vector x y z) = PixelRGBF (double2Float x) (double2Float y) (double2Float z)
 
-checkHits :: Int -> Int -> Int -> [Hittable] -> Maybe HitRecord
-checkHits x y sample objs = case hits of
+checkHits :: Ray -> [Hittable] -> Maybe HitRecord
+checkHits ray objs = case hits of
   [] -> Nothing
   _ -> Just (minimumBy (comparing rayLength) hits)
   where
     hits = mapMaybe (\obj -> hit obj ray interval) objs
-    ray = rayFromPixelXY x y sample
     interval = Interval {Math.min = 0, Math.max = posInf}
     posInf = 1 / 0
 
@@ -55,7 +62,7 @@ rayFromPixelXY x y sample = ray
 objectList :: [Hittable]
 objectList = [Hittable Sphere {radius = 100, center = Point3 0 (-100.5) (-1)}, Hittable Sphere {radius = 0.5, center = Point3 0 0 (-1)}]
 
-data HitRecord = HitRecord {hitPoint :: Point3, normal :: Vector, rayLength :: Double}
+data HitRecord = HitRecord {point :: Point3, normal :: Vector, rayLength :: Double}
 
 class HittableImpl a where
   hit :: a -> Ray -> Interval -> Maybe HitRecord
@@ -82,14 +89,14 @@ instance HittableImpl Sphere where
           (False, True) -> Just root2
           (False, False) -> Nothing
         rayLength = fromJust root
-        hitPoint = ray `at` rayLength
-        normal = (hitPoint - sphere.center) / splat sphere.radius
+        point = ray `at` rayLength
+        normal = (point - sphere.center) / splat sphere.radius
      in if discriminant >= 0 && isJust root
           then
             Just
               HitRecord
                 { rayLength,
-                  hitPoint,
+                  point,
                   normal
                 }
           else Nothing

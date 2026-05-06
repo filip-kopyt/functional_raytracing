@@ -4,9 +4,9 @@
 
 module Math (module Math) where
 
-import Data.Bits (Bits (xor), rotateL)
 import System.Random (Random (randomR), mkStdGen)
 import Prelude hiding (length)
+import Data.Hashable (Hashable(hash))
 
 data Ray = Ray {origin :: Point3, direction :: Vector}
 
@@ -50,10 +50,27 @@ instance Fractional Vector where
   Vector x1 y1 z1 / Vector x2 y2 z2 = Vector (x1 / x2) (y1 / y2) (z1 / z2)
   fromRational a = Vector (fromRational a) (fromRational a) (fromRational a)
 
+randomNormalizedVector :: Point3 -> Vector
+randomNormalizedVector (Vector x y z) = 
+  let seed = hash [x, y, z]
+      gen = mkStdGen seed
+      (u, gen') = randomR (0, 1.0) gen
+      (v, _) = randomR (0, 1.0) gen'
+      theta = 2 * pi * u
+      phi = acos (2 * v - 1)
+      x' = cos theta * sin phi
+      y' = sin theta * sin phi
+      z' = cos phi
+  in normalize (Vector x' y' z')
+
+onHemisphere :: Vector -> Vector -> Vector
+onHemisphere v normal | v `dot` normal > 0.0 = v
+                      | otherwise = -v
+
 sampleOffset :: Int -> Int -> Int -> Vector
 sampleOffset x y sample =
-  let hash a b c = a `xor` rotateL b 13 `xor` rotateL c 23
-      gen = mkStdGen (hash x y sample)
+  let seed = hash [x, y, sample]
+      gen = mkStdGen seed
       (x', gen') = randomR (-0.5, 0.5) gen
       (y', _) = randomR (-0.5, 0.5) gen'
    in Vector x' y' 0

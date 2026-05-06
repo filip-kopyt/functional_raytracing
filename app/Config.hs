@@ -22,8 +22,13 @@ viewpointWidth = viewpointHeight * (fromIntegral width / fromIntegral height)
 viewpointHeight = 2.0
 
 width, height :: Int
-width = 1600
+width = 800
 height = round (fromIntegral width / aspectRatio)
 
 samplesPerPixel :: Int
-samplesPerPixel = 16
+samplesPerPixel = 256
+
+maxDepth :: Int
+maxDepth = 8
+
+
