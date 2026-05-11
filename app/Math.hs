@@ -4,9 +4,9 @@
 
 module Math (module Math) where
 
+import Data.Hashable (Hashable (hash))
 import System.Random (Random (randomR), mkStdGen)
 import Prelude hiding (length)
-import Data.Hashable (Hashable(hash))
 
 data Ray = Ray {origin :: Point3, direction :: Vector}
 
@@ -32,7 +32,7 @@ dot :: Vector -> Vector -> Double
 dot (Vector x1 y1 z1) (Vector x2 y2 z2) = sum [x1 * x2, y1 * y2, z1 * z2]
 
 at :: Ray -> Double -> Point3
-at (Ray {origin, direction}) t = origin + splat t * direction
+at (Ray{origin, direction}) t = origin + splat t * direction
 
 inside :: Double -> Interval -> Bool
 inside x t = t.min < x && x < t.max
@@ -51,7 +51,7 @@ instance Fractional Vector where
   fromRational a = Vector (fromRational a) (fromRational a) (fromRational a)
 
 randomNormalizedVector :: Point3 -> Vector
-randomNormalizedVector (Vector x y z) = 
+randomNormalizedVector (Vector x y z) =
   let seed = hash [x, y, z]
       gen = mkStdGen seed
       (u, gen') = randomR (0, 1.0) gen
@@ -61,11 +61,12 @@ randomNormalizedVector (Vector x y z) =
       x' = cos theta * sin phi
       y' = sin theta * sin phi
       z' = cos phi
-  in normalize (Vector x' y' z')
+   in normalize (Vector x' y' z')
 
 onHemisphere :: Vector -> Vector -> Vector
-onHemisphere v normal | v `dot` normal > 0.0 = v
-                      | otherwise = -v
+onHemisphere v normal
+  | v `dot` normal > 0.0 = v
+  | otherwise = -v
 
 sampleOffset :: Int -> Int -> Int -> Vector
 sampleOffset x y sample =
@@ -74,3 +75,6 @@ sampleOffset x y sample =
       (x', gen') = randomR (-0.5, 0.5) gen
       (y', _) = randomR (-0.5, 0.5) gen'
    in Vector x' y' 0
+
+reflect :: Vector -> Vector -> Vector
+reflect v normal = v - splat (2 * v `dot` normal) * normal

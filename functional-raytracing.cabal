@@ -70,10 +70,12 @@ executable functional-raytracing
 
     -- Other library packages from which modules are imported.
     build-depends:
-        , base ^>=4.22.0.0
+        , base ^>=4.18.3.0
         , JuicyPixels
         , random
         , hashable
+        , parallel
+        , repa
 
     -- Directories containing source files.
     hs-source-dirs:   app
