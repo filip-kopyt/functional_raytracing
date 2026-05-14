@@ -5,6 +5,7 @@
 module Math (module Math) where
 
 import Data.Hashable (Hashable (hash))
+import GHC.Float (powerDouble)
 import System.Random (Random (randomR), mkStdGen)
 import Prelude hiding (length)
 
@@ -78,3 +79,16 @@ sampleOffset x y sample =
 
 reflect :: Vector -> Vector -> Vector
 reflect v normal = v - splat (2 * v `dot` normal) * normal
+
+refract :: Vector -> Vector -> Double -> Vector
+refract uv n eta'OverEta =
+  let cosTheta = min ((-uv) `dot` n) 1.0
+      rOutPerp = splat eta'OverEta * (uv + splat cosTheta * n)
+      rOutParallel = splat (-sqrt (abs (1.0 - powerDouble (length rOutPerp) 2.0))) * n
+   in rOutPerp + rOutParallel
+
+reflactance :: Double -> Double -> Double
+reflactance cosine refractionIndex =
+  let r0' = (1 - refractionIndex) / (1 + refractionIndex)
+      r0 = r0' * r0'
+   in r0 + (1 - r0) * powerDouble (1 - cosine) 5

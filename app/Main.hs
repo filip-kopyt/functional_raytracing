@@ -10,10 +10,12 @@ import Data.Array.Repa qualified as R
 import Data.Foldable (minimumBy)
 import Data.Function ((&))
 import Data.Functor ((<&>))
+import Data.Hashable (hash)
 import Data.Maybe (fromJust, isJust, mapMaybe)
 import Data.Ord
 import GHC.Float (double2Float, powerDouble, sqrtDouble)
 import Math
+import System.Random (Random (random), mkStdGen)
 import Prelude hiding (length)
 
 type RGBF = (Double, Double, Double)
@@ -77,11 +79,12 @@ objectList :: [Hittable]
 objectList =
   [ Hittable Lambertian{l_albedo = Vector 0.8 0.8 0.0} Sphere{radius = 100, center = Point3 0 (-100.5) (-1)}
   , Hittable Lambertian{l_albedo = Vector 0.1 0.2 0.5} Sphere{radius = 0.5, center = Point3 0 0 (-1)}
-  , Hittable Metal{m_albedo = Vector 0.8 0.8 0.8} Sphere{radius = 0.5, center = Point3 (-1) 0 (-1)}
-  , Hittable Metal{m_albedo = Vector 0.8 0.6 0.2} Sphere{radius = 0.5, center = Point3 1 0 (-1)}
+  , Hittable Dielectric{refractionIndex = 1.4} Sphere{radius = 0.5, center = Point3 (-1) 0 (-1)}
+  , Hittable Dielectric{refractionIndex = 1.00 / 1.4} Sphere{radius = 0.4, center = Point3 (-1) 0 (-1)}
+  , Hittable Metal{m_albedo = Vector 0.8 0.6 0.2, fuzz = 1.0} Sphere{radius = 0.5, center = Point3 1 0 (-1)}
   ]
 
-data HitRecord = HitRecord {point :: Point3, normal :: Vector, rayLength :: Double, material :: Material}
+data HitRecord = HitRecord {point :: Point3, normal :: Vector, rayLength :: Double, material :: Material, frontFace :: Bool}
 
 class HittableImpl a where
   hit :: a -> Ray -> Interval -> Maybe HitRecord
@@ -114,7 +117,9 @@ instance HittableImpl Sphere where
           (False, False) -> Nothing
         rayLength = fromJust root
         point = ray `at` rayLength
-        normal = (point - sphere.center) / splat sphere.radius
+        normal' = (point - sphere.center) / splat sphere.radius
+        frontFace = (ray.direction `dot` normal') < 0
+        normal = if frontFace then normal' else -normal'
      in if discriminant >= 0 && isJust root
           then
             Just
@@ -122,6 +127,7 @@ instance HittableImpl Sphere where
                 { rayLength
                 , point
                 , normal
+                , frontFace
                 }
           else Nothing
 
@@ -139,13 +145,31 @@ instance MaterialImpl Lambertian where
         scattered = Ray{origin = hitRecord.point, direction = scatter_direction}
      in Just (l_albedo, scattered)
 
-data Metal = Metal {m_albedo :: Vector}
+data Metal = Metal {m_albedo :: Vector, fuzz :: Double}
 
 instance MaterialImpl Metal where
-  scatter Metal{m_albedo} ray hitRecord =
-    let reflected = reflect ray.direction hitRecord.normal
+  scatter Metal{m_albedo, fuzz} ray hitRecord =
+    let reflected' = reflect ray.direction hitRecord.normal
+        reflected = normalize reflected' + splat fuzz * randomNormalizedVector hitRecord.point
         scattered = Ray{origin = hitRecord.point, direction = reflected}
      in Just (m_albedo, scattered)
+
+data Dielectric = Dielectric {refractionIndex :: Double}
+
+instance MaterialImpl Dielectric where
+  scatter Dielectric{refractionIndex} ray hitRecord =
+    let attenuation = splat 1.0
+        ri = if hitRecord.frontFace then 1.0 / refractionIndex else refractionIndex
+        unitDirection = normalize ray.direction
+        cosTheta = min ((-unitDirection) `dot` hitRecord.normal) 1
+        sinTheta = sqrt (1 - powerDouble cosTheta 2)
+        cannotRefract = ri * sinTheta > 1.0
+        seed = hash [length hitRecord.point, refractionIndex]
+        gen = mkStdGen seed
+        (randomDouble, _) = random gen
+        direction = if cannotRefract || reflactance cosTheta ri > randomDouble then reflect unitDirection hitRecord.normal else refract unitDirection hitRecord.normal ri
+        scattered = Ray{origin = hitRecord.point, direction}
+     in Just (attenuation, scattered)
 
 toImage :: Array U DIM2 RGBF -> Image PixelRGBF
 toImage !a = generateImage gen w h

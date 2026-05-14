@@ -17,16 +17,16 @@ pixel00Loc = viewpointUpperLeft + 0.5 * (pixelDeltaU + pixelDeltaV)
 
 aspectRatio, focalLength, viewpointWidth, viewpointHeight :: Double
 aspectRatio = 16.0 / 9.0
-focalLength = 1.0
+focalLength = 1
 viewpointWidth = viewpointHeight * (fromIntegral width / fromIntegral height)
-viewpointHeight = 2.0
+viewpointHeight = 1
 
 width, height :: Int
 width = 1000
 height = round (fromIntegral width / aspectRatio)
 
 samplesPerPixel :: Int
-samplesPerPixel = 8196
+samplesPerPixel = 1024
 
 maxDepth :: Int
-maxDepth = 32
+maxDepth = 64
