@@ -16,6 +16,7 @@ import Data.Ord
 import GHC.Float (double2Float, powerDouble, sqrtDouble)
 import Math
 import System.Random (Random (random), mkStdGen)
+import System.FilePath (makeValid)
 import Prelude hiding (length)
 
 type RGBF = (Double, Double, Double)
@@ -180,8 +181,14 @@ toImage !a = generateImage gen w h
 
 main :: IO ()
 main = do
+  putStrLn "[Raytracing Image Generation]"
+  putStrLn "Enter output filename:"
+  input <- getLine
+  let filename = makeValid input
+  putStrLn $ "Using filename: " ++ filename
+  putStrLn "Generating image..."
   !img <- R.computeP generateImg
-  (savePngImage "output.png" . ImageRGBF . toImage) img
+  (savePngImage filename . ImageRGBF . toImage) img
 
 {-# INLINE pixelRenderer #-}
 {-# INLINE toImage #-}

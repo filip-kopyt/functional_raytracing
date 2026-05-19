@@ -76,6 +76,7 @@ executable functional-raytracing
         , hashable
         , parallel
         , repa
+        , filepath
 
     -- Directories containing source files.
     hs-source-dirs:   app
