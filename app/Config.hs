@@ -30,3 +30,6 @@ samplesPerPixel = 1024
 
 maxDepth :: Int
 maxDepth = 64
+
+defaultScenePath :: String
+defaultScenePath = "scene.json"

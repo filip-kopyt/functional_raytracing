@@ -1,0 +1,50 @@
+{
+  "objects": [
+    {
+      "type": "sphere",
+      "radius": 100,
+      "center": [0, -100.5, -1],
+      "material": {
+        "type": "lambertian",
+        "albedo": [0.8, 0.8, 0.0]
+      }
+    },
+    {
+      "type": "sphere",
+      "radius": 0.5,
+      "center": [0, 0, -1],
+      "material": {
+        "type": "lambertian",
+        "albedo": [0.1, 0.2, 0.5]
+      }
+    },
+    {
+      "type": "sphere",
+      "radius": 0.5,
+      "center": [1, 0, -1],
+      "material": {
+        "type": "metal",
+        "albedo": [0.8, 0.6, 0.2],
+        "fuzz": 1.0
+      }
+    },
+    {
+      "type": "sphere",
+      "radius": 0.5,
+      "center": [-1, 0, -1],
+      "material": {
+        "type": "dielectric",
+        "refractionIndex": 1.4
+      }
+    },
+    {
+      "type": "sphere",
+      "radius": 0.4,
+      "center": [-1, 0, -1],
+      "material": {
+        "type": "dielectric",
+        "refractionIndex": 0.714
+      }
+    }
+  ]
+}

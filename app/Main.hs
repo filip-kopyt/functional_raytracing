@@ -1,19 +1,26 @@
 {-# LANGUAGE DataKinds #-}
 {-# LANGUAGE OverloadedRecordDot #-}
+{-# LANGUAGE DeriveGeneric #-}
 
 module Main where
 
 import Codec.Picture
 import Config
+import Data.Aeson (FromJSON(..), eitherDecode, withObject)
+import Data.Aeson.Key (fromString)
+import Data.Aeson.Types ((.:))
 import Data.Array.Repa (Array, D, DIM2, U, Z (Z), (!), (:.) ((:.)))
 import Data.Array.Repa qualified as R
+import qualified Data.ByteString.Lazy as BL
 import Data.Foldable (minimumBy)
 import Data.Function ((&))
 import Data.Functor ((<&>))
 import Data.Hashable (hash)
+import Data.List (isSuffixOf)
 import Data.Maybe (fromJust, isJust, mapMaybe)
 import Data.Ord
 import GHC.Float (double2Float, powerDouble, sqrtDouble)
+import GHC.Generics (Generic)
 import Math
 import System.Random (Random (random), mkStdGen)
 import System.FilePath (makeValid)
@@ -21,29 +28,29 @@ import Prelude hiding (length)
 
 type RGBF = (Double, Double, Double)
 
-pixelRenderer :: (Z :. Int :. Int) -> RGBF
-pixelRenderer (Z :. x :. y) = map (rayColor . rayFromPixelXY x y) [0 .. samplesPerPixel] & sum & (/ fromIntegral samplesPerPixel) & gammaCorrection
+pixelRenderer :: [Hittable] -> (Z :. Int :. Int) -> RGBF
+pixelRenderer objs (Z :. x :. y) = map (rayColor objs . rayFromPixelXY x y) [0 .. samplesPerPixel] & sum & (/ fromIntegral samplesPerPixel) & gammaCorrection
  where
   gammaCorrection (Vector !r !g !b) = (gamma r, gamma g, gamma b)
-  gamma x
-    | x > 0 = sqrt x
+  gamma col
+    | col > 0 = sqrt col
     | otherwise = 0
 
-generateImg :: Array D DIM2 RGBF
-generateImg = R.fromFunction (Z :. width :. height) pixelRenderer
+generateImg :: [Hittable] -> Array D DIM2 RGBF
+generateImg objs = R.fromFunction (Z :. width :. height) (pixelRenderer objs)
 
-rayColor :: Ray -> Vector
-rayColor = rayColor' maxDepth
+rayColor :: [Hittable] -> Ray -> Vector
+rayColor objs = rayColor' objs maxDepth
 
-rayColor' :: Int -> Ray -> Vector
-rayColor' !depth !ray
-  | depth > 0 = case checkHits ray objectList of
+rayColor' :: [Hittable] -> Int -> Ray -> Vector
+rayColor' !objs !depth !ray
+  | depth > 0 = case checkHits ray objs of
       Just hitRecord -> color
        where
         material = scatter hitRecord.material ray hitRecord
         (attenuation, childRay) = fromJust material
         color
-          | isJust material = attenuation * rayColor' (depth - 1) childRay
+          | isJust material = attenuation * rayColor' objs (depth - 1) childRay
           | otherwise = splat 0
       Nothing -> background
        where
@@ -76,14 +83,118 @@ rayFromPixelXY !x !y !sample = ray
   rayDirection = pixelCenter - cameraCenter
   ray = Ray{origin = cameraCenter, direction = rayDirection}
 
-objectList :: [Hittable]
-objectList =
-  [ Hittable Lambertian{l_albedo = Vector 0.8 0.8 0.0} Sphere{radius = 100, center = Point3 0 (-100.5) (-1)}
-  , Hittable Lambertian{l_albedo = Vector 0.1 0.2 0.5} Sphere{radius = 0.5, center = Point3 0 0 (-1)}
-  , Hittable Dielectric{refractionIndex = 1.4} Sphere{radius = 0.5, center = Point3 (-1) 0 (-1)}
-  , Hittable Dielectric{refractionIndex = 1.00 / 1.4} Sphere{radius = 0.4, center = Point3 (-1) 0 (-1)}
-  , Hittable Metal{m_albedo = Vector 0.8 0.6 0.2, fuzz = 1.0} Sphere{radius = 0.5, center = Point3 1 0 (-1)}
-  ]
+data SceneConfig = SceneConfig
+  { objects :: [ObjectConfig]
+  }
+  deriving (Show, Generic)
+
+instance FromJSON SceneConfig
+
+data MaterialConfig
+  = LambertianConfig
+      { materialAlbedo :: [Double]
+      }
+  | MetalConfig
+      { materialAlbedo :: [Double]
+      , materialFuzz :: Double
+      }
+  | DielectricConfig
+      { materialRefractionIndex :: Double
+      }
+  deriving Show
+
+instance FromJSON MaterialConfig where
+  parseJSON = withObject "Material" $ \o -> do
+    typ <- o .: fromString "type"
+
+    case typ of
+      "lambertian" ->
+        LambertianConfig
+          <$> o .: fromString "albedo"
+
+      "metal" ->
+        MetalConfig
+          <$> o .: fromString "albedo"
+          <*> o .: fromString "fuzz"
+
+      "dielectric" ->
+        DielectricConfig
+          <$> o .: fromString "refractionIndex"
+
+      _ ->
+        fail ("Unknown material type: " ++ typ)
+
+data ObjectConfig
+  = SphereConfig
+      { sphereRadius :: Double
+      , sphereCenter :: [Double]
+      , sphereMaterial :: MaterialConfig
+      }
+  deriving Show
+
+instance FromJSON ObjectConfig where
+  parseJSON = withObject "Object" $ \o -> do
+    typ <- o .: fromString "type"
+
+    case typ of
+      "sphere" ->
+        SphereConfig
+          <$> o .: fromString "radius"
+          <*> o .: fromString "center"
+          <*> o .: fromString "material"
+
+      _ ->
+        fail ("Unknown object type: " ++ typ)
+
+toVector :: [Double] -> Vector
+toVector [x,y,z] = Vector x y z
+toVector xs =
+  error $
+    "Expected exactly 3 coordinates, got "
+      ++ show xs
+
+buildObject :: ObjectConfig -> Hittable
+buildObject SphereConfig { sphereRadius, sphereCenter, sphereMaterial } =
+  let sphere =
+        Sphere
+          { radius = sphereRadius
+          , center = toVector sphereCenter
+          }
+   in case sphereMaterial of
+
+        LambertianConfig alb ->
+          Hittable
+            Lambertian
+              { l_albedo = toVector alb
+              }
+            sphere
+
+        MetalConfig alb f ->
+          Hittable
+            Metal
+              { m_albedo = toVector alb
+              , fuzz = f
+              }
+            sphere
+
+        DielectricConfig ri ->
+          Hittable
+            Dielectric
+              { refractionIndex = ri
+              }
+            sphere
+
+loadScene :: FilePath -> IO [Hittable]
+loadScene path = do
+  bytes <- BL.readFile path
+
+  case eitherDecode bytes of
+    Left err ->
+      fail ("Scene parse error:\n" ++ err)
+
+    Right scene ->
+      pure $
+        map buildObject (objects scene)
 
 data HitRecord = HitRecord {point :: Point3, normal :: Vector, rayLength :: Double, material :: Material, frontFace :: Bool}
 
@@ -121,6 +232,7 @@ instance HittableImpl Sphere where
         normal' = (point - sphere.center) / splat sphere.radius
         frontFace = (ray.direction `dot` normal') < 0
         normal = if frontFace then normal' else -normal'
+        material = error "HitRecord material should be filled by Hittable"
      in if discriminant >= 0 && isJust root
           then
             Just
@@ -128,6 +240,7 @@ instance HittableImpl Sphere where
                 { rayLength
                 , point
                 , normal
+                , material
                 , frontFace
                 }
           else Nothing
@@ -182,13 +295,19 @@ toImage !a = generateImage gen w h
 main :: IO ()
 main = do
   putStrLn "[Raytracing Image Generation]"
+  putStrLn $ "Enter scene filename (default: " ++ defaultScenePath ++ "):"
+  input1 <- getLine
+  let inFilename = makeValid (if null input1 then defaultScenePath else input1)
+  putStrLn $ "Using scene: " ++ inFilename
+  objectList <- loadScene inFilename
   putStrLn "Enter output filename:"
-  input <- getLine
-  let filename = makeValid input
-  putStrLn $ "Using filename: " ++ filename
+  input2 <- getLine
+  let baseOut = makeValid (if null input2 then "output" else input2)
+  let outFilename = if ".png" `isSuffixOf` baseOut then baseOut else baseOut ++ ".png"
+  putStrLn $ "Using output: " ++ outFilename
   putStrLn "Generating image..."
-  !img <- R.computeP generateImg
-  (savePngImage filename . ImageRGBF . toImage) img
+  !img <- R.computeP $ generateImg objectList
+  (savePngImage outFilename . ImageRGBF . toImage) img
 
 {-# INLINE pixelRenderer #-}
 {-# INLINE toImage #-}
