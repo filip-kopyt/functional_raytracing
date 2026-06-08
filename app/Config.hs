@@ -22,14 +22,17 @@ viewpointWidth = viewpointHeight * (fromIntegral width / fromIntegral height)
 viewpointHeight = 1
 
 width, height :: Int
-width = 1000
+width = 1080
 height = round (fromIntegral width / aspectRatio)
 
 samplesPerPixel :: Int
 samplesPerPixel = 1024
 
 maxDepth :: Int
-maxDepth = 64
+maxDepth = 16
 
 defaultScenePath :: String
 defaultScenePath = "scene.json"
+
+defaultOutput :: String
+defaultOutput = "output"
