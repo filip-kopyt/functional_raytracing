@@ -73,6 +73,9 @@ test-suite tests
     build-depends:
         base >=4.18.3.0,
         functional-raytracing,
-        HUnit
+        HUnit,
+        bytestring,
+        aeson,
+        temporary
 
     default-language: GHC2021
