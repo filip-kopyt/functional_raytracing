@@ -77,13 +77,12 @@ test_onHemisphere =
 
 test_sampleOffset_bounds :: Test
 test_sampleOffset_bounds =
-  "sampleOffset bounds" ~:
-    let Vector x y z = sampleOffset 4 5 6
-    in do
-      assertBool "x in range" (-0.5 <= x && x <= 0.5)
-      assertBool "y in range" (-0.5 <= y && y <= 0.5)
-      z @?= 0
-      sampleOffset 4 5 6 @?= sampleOffset 4 5 6 -- should be "deterministic"
+  "sampleOffset bounds" ~: [1..16] <&> (\x -> (x, sampleOffset x x x)) <&> (\(s, v@(Vector x y z)) -> do
+    assertBool "x in range" (-0.5 <= x && x <= 0.5)
+    assertBool "y in range" (-0.5 <= y && y <= 0.5)
+    z @?= 0
+    v @?= sampleOffset s s s
+  )
 
 test_reflect :: Test
 test_reflect = "test_reflect" ~: condition where
